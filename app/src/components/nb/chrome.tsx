@@ -175,7 +175,7 @@ export function Footer() {
               {EMAIL}
             </a>
             <form className="pill" onSubmit={send}>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" aria-label="Your name" />
+              <input maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" aria-label="Your name" />
               <button type="submit" className="btn btn-blue sm">
                 Send
               </button>

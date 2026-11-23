@@ -98,7 +98,7 @@ function EnquiryDialog({ initialService, onClose }: { initialService: string; on
         <p className="dlg-sub">Tell me a little about your project. You can review and edit the message in WhatsApp before sending it.</p>
         <label>
           Your name
-          <input ref={first} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" required />
+          <input ref={first} maxLength={80} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoComplete="name" required />
         </label>
         <label>
           Service
@@ -115,7 +115,7 @@ function EnquiryDialog({ initialService, onClose }: { initialService: string; on
         </label>
         <label>
           Project details
-          <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={4} placeholder="Briefly describe your project and requirements." />
+          <textarea maxLength={1200} value={details} onChange={(e) => setDetails(e.target.value)} rows={4} placeholder="Briefly describe your project and requirements." />
         </label>
         <button type="submit" className="btn btn-blue block">
           <WhatsApp /> Continue on WhatsApp
