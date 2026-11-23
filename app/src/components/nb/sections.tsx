@@ -177,7 +177,7 @@ export function Results() {
     </div>
   );
   return (
-    <section className="sec tone-blue" id="results">
+    <section className="sec" id="results">
       <div className="c">
         <div className="center">
           <span className="eyebrow">Highlights</span>
@@ -311,7 +311,7 @@ export function Pricing() {
 export function Faq() {
   const [open, setOpen] = useState(0);
   return (
-    <section className="sec" id="faq">
+    <section className="sec tone-light" id="faq">
       <div className="c">
         <div className="center">
           <span className="eyebrow">FAQ</span>

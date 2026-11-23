@@ -404,4 +404,10 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .hero{touch-action:pan-y}
 
 /* section tones: black hero/about, blue blocks, near-black navy footer */
-.sec.tone-blue{--bg:#0b2562;background:linear-gradient(180deg,#0a2259 0%,#0f2f7a 100%)}
+.sec.tone-blue{--bg:#06112e;background:linear-gradient(180deg,#030816 0%,#071a45 38%,#0b2761 70%,#061336 100%)}
+/* FAQ: soft off-white to grey, text flipped to dark */
+.sec.tone-light{--bg:#e4e5e9;--fg:#0c101a;--mut:#4a505c;--dim:#6b717d;--line:rgba(0,0,0,.12);--blue-t:#1a5cff;color:var(--fg);background:linear-gradient(180deg,#f2f2f3 0%,#dcdee3 55%,#bcc0c8 100%)}
+.tone-light .faq-i{background:rgba(255,255,255,.6);border-color:rgba(0,0,0,.1)}
+.tone-light .faq-i:hover{border-color:rgba(0,0,0,.28)}
+.tone-light .faq-ic{background:rgba(0,0,0,.08);color:var(--fg)}
+.tone-light .faq-i.open .faq-ic,.tone-light .faq-q:hover .faq-ic{background:var(--blue);color:#fff}
