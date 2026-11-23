@@ -1,35 +1,8 @@
 import { useEffect, useRef } from "react";
 import marks from "../../data/mark-points.json";
 
-declare global {
-  interface Window {
-    __nbReady?: boolean;
-  }
-}
-
 const MARK = marks as { aspect: number; p: number[][] };
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-
-function whenReady(fn: () => void): () => void {
-  let done = false;
-  const go = () => {
-    if (!done) {
-      done = true;
-      fn();
-    }
-  };
-  if (window.__nbReady) {
-    go();
-    return () => {};
-  }
-  window.addEventListener("nb:ready", go, { once: true });
-  const t = window.setTimeout(go, 6500);
-  return () => {
-    done = true;
-    window.removeEventListener("nb:ready", go);
-    window.clearTimeout(t);
-  };
-}
 
 /** Shared pointer in client coordinates; far away when the pointer is gone. */
 function trackPointer() {
@@ -115,7 +88,7 @@ export function ParticleLogo() {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const small = window.innerWidth < 860;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const stride = small ? 2 : 1;
+    const stride = 1;
 
     /* logo particles */
     const pts = MARK.p.filter((_, i) => i % stride === 0);
@@ -130,6 +103,7 @@ export function ParticleLogo() {
     const fy = new Float32Array(nL);
     const dl = new Float32Array(nL);
     const ph = new Float32Array(nL);
+    const hold = new Float32Array(nL);
     const bucketLists: number[][] = [[], [], []];
     for (let i = 0; i < nL; i++) {
       const [px, py, kind] = pts[i];
@@ -137,7 +111,7 @@ export function ParticleLogo() {
       ny[i] = py / 500;
       fx[i] = (small ? 0 : 0.3) + Math.random() * (small ? 1 : 0.72);
       fy[i] = Math.random();
-      dl[i] = (Math.hypot(nx[i], ny[i] * 2.2) * 0.55 + Math.random() * 0.5) * 4;
+      dl[i] = (Math.hypot(nx[i], ny[i] * 2.2) * 0.55 + Math.random() * 0.5) * 0.9;
       ph[i] = Math.random() * 6.283;
       bucketLists[kind === 1 ? 2 : Math.random() < 0.55 ? 0 : 1].push(i);
     }
@@ -150,7 +124,7 @@ export function ParticleLogo() {
     const R0 = 0.22 * Math.min(er.width || 360, er.height || 360) * 1.3;
     const gap = small ? 2.4 : 2.1;
     const nS = clamp(Math.round((4 * Math.PI * R0 * R0) / (gap * gap)), 5500, small ? 9500 : 16000);
-    const nH = small ? 650 : 1200;
+    const nH = small ? 1000 : 1800;
     const ux = new Float32Array(nS);
     const uy = new Float32Array(nS);
     const uz = new Float32Array(nS);
@@ -158,6 +132,7 @@ export function ParticleLogo() {
     const oy = new Float32Array(nS);
     const ovx = new Float32Array(nS);
     const ovy = new Float32Array(nS);
+    const rj = new Float32Array(nS);
     const rx = new Float32Array(nS);
     const ry = new Float32Array(nS);
     const osx = new Float32Array(nS);
@@ -177,11 +152,12 @@ export function ParticleLogo() {
       ux[j] = Math.cos(th) * r;
       uy[j] = yy;
       uz[j] = Math.sin(th) * r;
+      rj[j] = Math.random() < 0.34 ? Math.pow(Math.random(), 2.2) * 0.2 : 0;
       rx[j] = Math.random() * 2 - 1;
       ry[j] = Math.random() * 2 - 1;
       osx[j] = (Math.random() - 0.5) * 1.4;
       osy[j] = (Math.random() - 0.5) * 1.4;
-      sdl[j] = Math.random() * 0.9 * 4;
+      sdl[j] = Math.random() * 0.8;
       ssz[j] = 0.78 + Math.random() * 0.4;
     }
 
@@ -199,7 +175,7 @@ export function ParticleLogo() {
       hux[k] = Math.cos(a) * s;
       huy[k] = u;
       huz[k] = Math.sin(a) * s;
-      hr[k] = 1.06 + Math.pow(Math.random(), 1.7) * 0.5;
+      hr[k] = 1.03 + Math.pow(Math.random(), 2.2) * 0.45;
       hph[k] = Math.random() * 6.283;
       hsz[k] = 0.7 + Math.random() * 0.5;
     }
@@ -254,7 +230,7 @@ export function ParticleLogo() {
     let AH = 1;
     let R = 1;
     let t = 0;
-    let formAt = reduce ? -10 : Infinity;
+    let formAt = reduce ? -10 : 0;
     let rotY = 0.6;
     let tilt = 0.18;
     let spin = 0.2;
@@ -295,6 +271,10 @@ export function ParticleLogo() {
         for (let i = 0; i < nL; i++) {
           lx[i] = fx[i] * W;
           ly[i] = fy[i] * H;
+        }
+        for (let j = 0; j < nS; j++) {
+          ox[j] = osx[j] * W * 0.5;
+          oy[j] = osy[j] * H * 0.5;
         }
       }
       if (reduce) {
@@ -394,7 +374,8 @@ export function ParticleLogo() {
         const y2 = uy[j] * cosT - z1 * sinT;
         const z2 = uy[j] * sinT + z1 * cosT;
         const h = nLive ? waveAt(x1, y2, z2) : 0;
-        const r1 = 1 + h;
+        let r1 = 1 + h;
+        if (rj[j] > 0) r1 += rj[j] * (0.75 + 0.25 * Math.sin(t * 0.5 + rx[j] * 6));
         const pp = 1 / (1 - 0.3 * z2 * r1);
         const bx = cx + x1 * r1 * R * pp;
         const by = cy + y2 * r1 * R * pp;
@@ -447,7 +428,7 @@ export function ParticleLogo() {
         const rim = 1 - Math.abs(z2);
         let lit = x1 * LX + y2 * LY + z2 * LZ;
         lit = lit > 0 ? lit : 0;
-        let dm = act ? (Math.abs(ox[j]) + Math.abs(oy[j])) * dm0 : 0;
+        let dm = act && t > formAt + 1.8 ? (Math.abs(ox[j]) + Math.abs(oy[j])) * dm0 : 0;
         if (dm > 1) dm = 1;
         let b = 0.1 + 0.55 * rim * rim * (0.6 + 0.4 * rim) + 0.32 * lit * lit * (z2 > 0 ? 1 : 0.4);
         b += dm * 0.5 + Math.abs(h) * 1.8;
@@ -528,7 +509,7 @@ export function ParticleLogo() {
 
       // logo
       ctx.globalAlpha = 0.95;
-      const ds = small ? 2 : 2.3;
+      const ds = small ? 1.15 : 1.3;
       for (let b = 0; b < 3; b++) {
         ctx.fillStyle = LCOL[b];
         const list = buckets[b];
@@ -548,13 +529,15 @@ export function ParticleLogo() {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (t < formAt + 1.2) return;
       const [px, py] = local(e);
-      if (Math.hypot(px - cx, py - cy) > R * 1.35) return;
+      const dd = Math.hypot(px - cx, py - cy);
+      if (dd > R * 2.4) return;
       drag.down = true;
       drag.id = e.pointerId;
       drag.lx = px;
       drag.ly = py;
       drag.dx = 0;
       drag.dy = 0;
+      if (dd > R * 1.35) return;
       const now = performance.now();
       combo = now - lastTap < 380 ? Math.min(combo + 1, 6) : 0;
       lastTap = now;
@@ -588,39 +571,6 @@ export function ParticleLogo() {
       const ppx = hasP ? px : -1e5;
       const ppy = hasP ? py : -1e5;
 
-      const Rp = clamp(S * 0.55, 88, 240);
-      const Rp2 = Rp * Rp;
-      for (let i = 0; i < nL; i++) {
-        const act = t >= formAt + dl[i];
-        let tx: number;
-        let ty: number;
-        if (act) {
-          tx = cx + nx[i] * S + Math.sin(t * 0.9 + ph[i]) * 1.1;
-          ty = cy + ny[i] * S + Math.cos(t * 0.8 + ph[i]) * 1.1;
-        } else {
-          tx = fx[i] * W + Math.sin(t * 0.4 + ph[i] * 3) * 34;
-          ty = fy[i] * H + Math.cos(t * 0.35 + ph[i] * 2) * 34;
-        }
-        let ax = (tx - lx[i]) * 3.4 - lvx[i] * 2.2;
-        let ay = (ty - ly[i]) * 3.4 - lvy[i] * 2.2;
-        if (hasP) {
-          const dx = lx[i] - ppx;
-          const dy = ly[i] - ppy;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < Rp2 && d2 > 0.01) {
-            const d = Math.sqrt(d2);
-            const q = 1 - d / Rp;
-            const f = q * q * 1100;
-            ax += (dx / d) * f - (dy / d) * f * 0.7;
-            ay += (dy / d) * f + (dx / d) * f * 0.7;
-          }
-        }
-        lvx[i] += ax * dt;
-        lvy[i] += ay * dt;
-        lx[i] += lvx[i] * dt;
-        ly[i] += lvy[i] * dt;
-      }
-
       // spin: follow the finger while dragging, keep gliding after release, then settle
       const dragging = drag.down && hasP;
       if (drag.down) {
@@ -642,6 +592,68 @@ export function ParticleLogo() {
         const tt = hasP ? clamp((py - cy) / AH, -0.5, 0.5) * 0.7 : 0.18;
         tilt += (tt - tilt) * Math.min(1, dt * 2.5);
       }
+      const Rp = clamp(S * 0.55, 88, 240);
+      const Rp2 = Rp * Rp;
+      const fastForm = t < formAt + 2.2;
+      const kk = fastForm ? 10 : 3.4;
+      const cc = fastForm ? 4.4 : 2.2;
+      const sp0 = Math.hypot(dvx, dvy);
+      const cut = dragging && sp0 > 60;
+      const cux = cut ? dvx / sp0 : 0;
+      const cuy = cut ? dvy / sp0 : 0;
+      const La = Rp * 0.8;
+      const Lw = clamp(S * 0.11, 7, 12);
+      for (let i = 0; i < nL; i++) {
+        const act = t >= formAt + dl[i];
+        let tx: number;
+        let ty: number;
+        if (act) {
+          tx = cx + nx[i] * S + Math.sin(t * 0.9 + ph[i]) * 1.1;
+          ty = cy + ny[i] * S + Math.cos(t * 0.8 + ph[i]) * 1.1;
+        } else {
+          tx = fx[i] * W + Math.sin(t * 0.4 + ph[i] * 3) * 34;
+          ty = fy[i] * H + Math.cos(t * 0.35 + ph[i] * 2) * 34;
+        }
+        // particles parted by a swipe stay apart for a moment so the whole path reads as one lane
+        const hk = hold[i] > 0 ? 0.22 : 1;
+        if (hold[i] > 0) hold[i] -= dt;
+        let ax = (tx - lx[i]) * kk * hk - lvx[i] * cc;
+        let ay = (ty - ly[i]) * kk * hk - lvy[i] * cc;
+        if (cut) {
+          // swipe: open one clean straight lane along the finger path, particles part to either side
+          const cdx = lx[i] - ppx;
+          const cdy = ly[i] - ppy;
+          const along = cdx * cux + cdy * cuy;
+          const perp = -cdx * cuy + cdy * cux;
+          const aa = along < 0 ? -along : along;
+          const ap = perp < 0 ? -perp : perp;
+          const lwi = Lw * (0.7 + 0.6 * ((ph[i] * 3.7) % 1));
+          if (aa < La && ap < lwi) {
+            hold[i] = 0.85;
+            const wa = 1 - aa / La;
+            const sg = perp > 0.3 ? 1 : perp < -0.3 ? -1 : Math.sin(ph[i] * 7) > 0 ? 1 : -1;
+            const f = wa * (1 - ap / lwi) * 650 * sg;
+            ax += -cuy * f;
+            ay += cux * f;
+          }
+        } else if (hasP) {
+          const dx = lx[i] - ppx;
+          const dy = ly[i] - ppy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < Rp2 && d2 > 0.01) {
+            const d = Math.sqrt(d2);
+            const q = 1 - d / Rp;
+            const f = q * q * 1100;
+            ax += (dx / d) * f - (dy / d) * f * 0.7;
+            ay += (dy / d) * f + (dx / d) * f * 0.7;
+          }
+        }
+        lvx[i] += ax * dt;
+        lvy[i] += ay * dt;
+        lx[i] += lvx[i] * dt;
+        ly[i] += lvy[i] * dt;
+      }
+
       project(dt, ppx, ppy, dragging);
       draw();
     };
@@ -652,18 +664,11 @@ export function ParticleLogo() {
     layout();
 
     let stopLoop = () => {};
-    let stopReady = () => {};
-    if (!reduce) {
-      stopReady = whenReady(() => {
-        formAt = t;
-      });
-      stopLoop = visibleLoop(wrap, frame);
-    }
+    if (!reduce) stopLoop = visibleLoop(wrap, frame);
 
     return () => {
       ro.disconnect();
       stopLoop();
-      stopReady();
       tracker.stop();
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);

@@ -13,7 +13,6 @@ import nbCss from "../nobbie.css?url";
 import { reportHiggsfieldError } from "../lib/higgsfield-error-reporting";
 import appMetaJson from "../app-meta.json";
 import { EnquiryProvider } from "../components/nb/enquiry";
-import { Loader } from "../components/nb/loader";
 import { ScrollTop } from "../components/nb/chrome";
 
 declare const __HF_DESIGN_INSPECTOR__: boolean;
@@ -178,7 +177,6 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <EnquiryProvider>
-        <Loader />
         <Outlet />
         <ScrollTop />
       </EnquiryProvider>

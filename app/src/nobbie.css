@@ -237,7 +237,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 @keyframes mq{to{transform:translateX(-25%)}}
 
 /* footer */
-.footer{position:relative;overflow:hidden;padding:56px 0 100px;background:var(--bg)}
+.footer{position:relative;overflow:hidden;padding:56px 0 100px;--bg:#03060f;background:var(--bg)}
 .footer .c{position:relative}
 .foot-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:80px;align-items:start}
 .foot-l h2{font-weight:300;font-size:clamp(38px,4.4vw,60px);line-height:1.08;letter-spacing:-.035em;margin-top:34px}
@@ -402,3 +402,6 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 
 /* let horizontal swipes reach the hero particles while vertical scrolling still works */
 .hero{touch-action:pan-y}
+
+/* section tones: black hero/about, blue blocks, near-black navy footer */
+.sec.tone-blue{--bg:#0b2562;background:linear-gradient(180deg,#0a2259 0%,#0f2f7a 100%)}

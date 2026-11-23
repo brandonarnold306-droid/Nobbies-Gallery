@@ -101,7 +101,7 @@ export function About() {
 export function Services() {
   const [open, setOpen] = useState(0);
   return (
-    <section className="sec" id="services">
+    <section className="sec tone-blue" id="services">
       <div className="c">
         <div className="svc-head">
           <div>
@@ -177,7 +177,7 @@ export function Results() {
     </div>
   );
   return (
-    <section className="sec" id="results">
+    <section className="sec tone-blue" id="results">
       <div className="c">
         <div className="center">
           <span className="eyebrow">Highlights</span>
