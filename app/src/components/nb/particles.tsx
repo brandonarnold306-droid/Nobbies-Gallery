@@ -144,8 +144,13 @@ export function ParticleLogo() {
     const buckets = bucketLists.map((l) => Int32Array.from(l));
     const LCOL = ["#3d7bff", "#6aa0ff", "#a9c9ff"];
 
-    /* sphere particles */
-    const nS = small ? 800 : 1700;
+    /* sphere: a fine, dense lattice of tiny dots that spins, ripples and scatters */
+    const anchor = wrap.closest(".hero")?.querySelector<HTMLElement>(".hero-anchor") ?? null;
+    const er = (anchor ?? wrap).getBoundingClientRect();
+    const R0 = 0.22 * Math.min(er.width || 360, er.height || 360) * 1.3;
+    const gap = small ? 2.4 : 2.1;
+    const nS = clamp(Math.round((4 * Math.PI * R0 * R0) / (gap * gap)), 5500, small ? 9500 : 16000);
+    const nH = small ? 650 : 1200;
     const ux = new Float32Array(nS);
     const uy = new Float32Array(nS);
     const uz = new Float32Array(nS);
@@ -153,14 +158,18 @@ export function ParticleLogo() {
     const oy = new Float32Array(nS);
     const ovx = new Float32Array(nS);
     const ovy = new Float32Array(nS);
+    const rx = new Float32Array(nS);
+    const ry = new Float32Array(nS);
     const osx = new Float32Array(nS);
     const osy = new Float32Array(nS);
     const sdl = new Float32Array(nS);
     const ssz = new Float32Array(nS);
     const spx = new Float32Array(nS);
     const spy = new Float32Array(nS);
-    const sdp = new Float32Array(nS);
+    const sdz = new Float32Array(nS);
+    const sps = new Float32Array(nS);
     const slv = new Uint8Array(nS);
+    const order = new Uint16Array(nS);
     for (let j = 0; j < nS; j++) {
       const yy = 1 - (2 * (j + 0.5)) / nS;
       const r = Math.sqrt(1 - yy * yy);
@@ -168,13 +177,73 @@ export function ParticleLogo() {
       ux[j] = Math.cos(th) * r;
       uy[j] = yy;
       uz[j] = Math.sin(th) * r;
+      rx[j] = Math.random() * 2 - 1;
+      ry[j] = Math.random() * 2 - 1;
       osx[j] = (Math.random() - 0.5) * 1.4;
       osy[j] = (Math.random() - 0.5) * 1.4;
       sdl[j] = Math.random() * 0.9 * 4;
-      ssz[j] = 0.8 + Math.random() * 0.9;
+      ssz[j] = 0.78 + Math.random() * 0.4;
     }
-    const SCOL = ["#1f46c9", "#3d7bff", "#9cc0ff"];
-    const SALP = [0.4, 0.75, 1];
+
+    /* halo: sparse dust drifting around the sphere */
+    const hux = new Float32Array(nH);
+    const huy = new Float32Array(nH);
+    const huz = new Float32Array(nH);
+    const hr = new Float32Array(nH);
+    const hph = new Float32Array(nH);
+    const hsz = new Float32Array(nH);
+    for (let k = 0; k < nH; k++) {
+      const u = Math.random() * 2 - 1;
+      const a = Math.random() * 6.283;
+      const s = Math.sqrt(1 - u * u);
+      hux[k] = Math.cos(a) * s;
+      huy[k] = u;
+      huz[k] = Math.sin(a) * s;
+      hr[k] = 1.06 + Math.pow(Math.random(), 1.7) * 0.5;
+      hph[k] = Math.random() * 6.283;
+      hsz[k] = 0.7 + Math.random() * 0.5;
+    }
+
+    /* brightness ramp: deep blue core, light-blue mid, white rim glow */
+    const LV = 9;
+    const stops: number[][] = [
+      [14, 38, 112],
+      [34, 82, 214],
+      [61, 123, 255],
+      [110, 166, 255],
+      [170, 205, 255],
+      [238, 245, 255],
+    ];
+    const SCOL: string[] = [];
+    const SALP: number[] = [];
+    for (let i = 0; i < LV; i++) {
+      const f = (i / (LV - 1)) * (stops.length - 1);
+      const a = Math.floor(f);
+      const b = Math.min(stops.length - 1, a + 1);
+      const m = f - a;
+      const c = stops[a].map((v, k) => Math.round(v + (stops[b][k] - v) * m));
+      SCOL.push(`rgb(${c[0]},${c[1]},${c[2]})`);
+      SALP.push(0.55 + 0.45 * (i / (LV - 1)));
+    }
+    const cnt = new Int32Array(LV);
+    const off = new Int32Array(LV + 1);
+    const LX = -0.45;
+    const LY = -0.5;
+    const LZ = 0.74;
+
+    /* ripples: waves that travel over the sphere, bounce off the far side and fade */
+    const MAXR = 6;
+    const WAVE_V = 2.3;
+    const ripX = new Float32Array(MAXR);
+    const ripY = new Float32Array(MAXR);
+    const ripZ = new Float32Array(MAXR);
+    const ripT = new Float32Array(MAXR);
+    const ripA = new Float32Array(MAXR);
+    let nRip = 0;
+    const liveF = new Float32Array(MAXR);
+    const liveA = new Float32Array(MAXR);
+    const liveI = new Int32Array(MAXR);
+    let nLive = 0;
 
     let W = 0;
     let H = 0;
@@ -183,13 +252,19 @@ export function ParticleLogo() {
     let S = 1;
     let AW = 1;
     let AH = 1;
-    const anchor = wrap.closest(".hero")?.querySelector<HTMLElement>(".hero-anchor") ?? null;
     let R = 1;
     let t = 0;
     let formAt = reduce ? -10 : Infinity;
     let rotY = 0.6;
     let tilt = 0.18;
+    let spin = 0.2;
+    let dvx = 0;
+    let dvy = 0;
     let first = true;
+
+    const drag = { down: false, id: -1, lx: 0, ly: 0, dx: 0, dy: 0 };
+    let lastTap = 0;
+    let combo = 0;
 
     const layout = () => {
       W = wrap.clientWidth;
@@ -236,46 +311,173 @@ export function ParticleLogo() {
       }
     };
 
-    const project = (dt: number, px = -1e5, py = -1e5) => {
+    /** Height of the surface at a view-space direction, from all live ripples. */
+    const waveAt = (x: number, y: number, z: number) => {
+      let h = 0;
+      for (let k = 0; k < nLive; k++) {
+        const i = liveI[k];
+        const c = x * ripX[i] + y * ripY[i] + z * ripZ[i];
+        const a = Math.acos(c > 1 ? 1 : c < -1 ? -1 : c);
+        const d = a - liveF[k];
+        if (d > 0.85 || d < -0.85) continue;
+        const e = d * 3.6;
+        h += liveA[k] * Math.exp(-e * e) * Math.cos(e * 3);
+      }
+      return h;
+    };
+
+    const addRipple = (qx: number, qy: number, amp: number) => {
+      let n = Math.hypot(qx, qy);
+      let z = 0;
+      if (n < 1) z = Math.sqrt(1 - n * n);
+      else {
+        qx /= n;
+        qy /= n;
+        n = 1;
+      }
+      if (nRip >= MAXR) {
+        // drop the oldest
+        for (let k = 1; k < MAXR; k++) {
+          ripX[k - 1] = ripX[k];
+          ripY[k - 1] = ripY[k];
+          ripZ[k - 1] = ripZ[k];
+          ripT[k - 1] = ripT[k];
+          ripA[k - 1] = ripA[k];
+        }
+        nRip = MAXR - 1;
+      }
+      ripX[nRip] = qx;
+      ripY[nRip] = qy;
+      ripZ[nRip] = z;
+      ripT[nRip] = t;
+      ripA[nRip] = amp;
+      nRip++;
+    };
+
+    const project = (dt: number, px = -1e5, py = -1e5, dragging = false) => {
+      // refresh live ripples (and forget the ones that have faded out)
+      nLive = 0;
+      let w = 0;
+      for (let k = 0; k < nRip; k++) {
+        const age = t - ripT[k];
+        if (age > 5) continue;
+        if (w !== k) {
+          ripX[w] = ripX[k];
+          ripY[w] = ripY[k];
+          ripZ[w] = ripZ[k];
+          ripT[w] = ripT[k];
+          ripA[w] = ripA[k];
+        }
+        const f = age * WAVE_V;
+        const fr = f <= Math.PI ? f : 2 * Math.PI - f;
+        if (fr > 0.02) {
+          liveI[nLive] = w;
+          liveF[nLive] = fr;
+          liveA[nLive] = ripA[w] * Math.exp(-age * 0.72);
+          nLive++;
+        }
+        w++;
+      }
+      nRip = w;
+
       const cosY = Math.cos(rotY);
       const sinY = Math.sin(rotY);
       const cosT = Math.cos(tilt);
       const sinT = Math.sin(tilt);
-      const Rp = clamp(S * 0.64, 96, 260);
+      const Rp = clamp(R * 0.5, 58, 200);
       const Rp2 = Rp * Rp;
+      const dm0 = 1 / (R * 0.22);
+      cnt.fill(0);
       for (let j = 0; j < nS; j++) {
         const x1 = ux[j] * cosY + uz[j] * sinY;
         const z1 = -ux[j] * sinY + uz[j] * cosY;
         const y2 = uy[j] * cosT - z1 * sinT;
         const z2 = uy[j] * sinT + z1 * cosT;
-        const pp = 1 / (1 - 0.3 * z2);
-        const bx = cx + x1 * R * pp;
-        const by = cy + y2 * R * pp;
+        const h = nLive ? waveAt(x1, y2, z2) : 0;
+        const r1 = 1 + h;
+        const pp = 1 / (1 - 0.3 * z2 * r1);
+        const bx = cx + x1 * r1 * R * pp;
+        const by = cy + y2 * r1 * R * pp;
+        const act = t >= formAt + sdl[j];
         if (dt > 0) {
-          const act = t >= formAt + sdl[j];
           const otx = act ? 0 : osx[j] * W;
           const oty = act ? 0 : osy[j] * H;
-          let ax = (otx - ox[j]) * 1.6 - ovx[j] * 1.6;
-          let ay = (oty - oy[j]) * 1.6 - ovy[j] * 1.6;
-          const dx = bx + ox[j] - px;
-          const dy = by + oy[j] - py;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < Rp2 && d2 > 0.01) {
-            const d = Math.sqrt(d2);
-            const q = 1 - d / Rp;
-            const f = q * q * 900;
-            ax += (dx / d) * f - (dy / d) * f * 0.45;
-            ay += (dy / d) * f + (dx / d) * f * 0.45;
+          let ax = (otx - ox[j]) * 15 - ovx[j] * 7.2;
+          let ay = (oty - oy[j]) * 15 - ovy[j] * 7.2;
+          if (act && px > -1e4) {
+            const dx = bx + ox[j] - px;
+            const dy = by + oy[j] - py;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < Rp2 && d2 > 0.01) {
+              const d = Math.sqrt(d2);
+              const q = 1 - d / Rp;
+              const wq = q * q * (3 - 2 * q) * (z2 > -0.3 ? 1 : 0.25);
+              if (dragging) {
+                // swipe: carry the dots along the finger and rough them up into a band
+                const k = 0.32 * (0.6 + 0.8 * (rx[j] * 0.5 + 0.5)) * wq;
+                ax += dvx * k + rx[j] * wq * 130;
+                ay += dvy * k + ry[j] * wq * 130;
+              } else {
+                const f = wq * R * 2.6;
+                ax += (dx / d) * f - (dy / d) * f * 0.4;
+                ay += (dy / d) * f + (dx / d) * f * 0.4;
+              }
+            }
           }
           ovx[j] += ax * dt;
           ovy[j] += ay * dt;
+          const sp = ovx[j] * ovx[j] + ovy[j] * ovy[j];
+          if (sp > 250000) {
+            const c = 500 / Math.sqrt(sp);
+            ovx[j] *= c;
+            ovy[j] *= c;
+          }
           ox[j] += ovx[j] * dt;
           oy[j] += ovy[j] * dt;
+          const om = Math.abs(ox[j]) + Math.abs(oy[j]);
+          if (act && om > R * 0.9) {
+            ox[j] *= (R * 0.9) / om;
+            oy[j] *= (R * 0.9) / om;
+          }
         }
         spx[j] = bx + ox[j];
         spy[j] = by + oy[j];
-        sdp[j] = pp;
-        slv[j] = z2 < -0.35 ? 0 : z2 < 0.35 ? 1 : 2;
+        sdz[j] = z2;
+        // brightness: rim glow + soft key light, boosted where dots are displaced
+        const rim = 1 - Math.abs(z2);
+        let lit = x1 * LX + y2 * LY + z2 * LZ;
+        lit = lit > 0 ? lit : 0;
+        let dm = act ? (Math.abs(ox[j]) + Math.abs(oy[j])) * dm0 : 0;
+        if (dm > 1) dm = 1;
+        let b = 0.1 + 0.55 * rim * rim * (0.6 + 0.4 * rim) + 0.32 * lit * lit * (z2 > 0 ? 1 : 0.4);
+        b += dm * 0.5 + Math.abs(h) * 1.8;
+        const lv = b <= 0 ? 0 : b >= 1 ? LV - 1 : (b * (LV - 1) + 0.5) | 0;
+        slv[j] = lv;
+        cnt[lv]++;
+        sps[j] = ssz[j] * (0.85 + 0.4 * pp) * (1 + dm * 0.7);
+      }
+      off[0] = 0;
+      for (let l = 0; l < LV; l++) off[l + 1] = off[l] + cnt[l];
+      for (let l = 0; l < LV; l++) cnt[l] = off[l];
+      for (let j = 0; j < nS; j++) order[cnt[slv[j]]++] = j;
+    };
+
+    const burst = (px: number, py: number, power: number) => {
+      const Rt = clamp(R * 0.62, 56, 190);
+      const Rt2 = Rt * Rt;
+      const ks = clamp(R / 110, 0.6, 1.8) * power;
+      for (let j = 0; j < nS; j++) {
+        if (sdz[j] < -0.2) continue;
+        const dx = spx[j] - px;
+        const dy = spy[j] - py;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > Rt2) continue;
+        const d = Math.sqrt(d2) + 0.001;
+        const q = 1 - d / Rt;
+        const wq = q * q * (3 - 2 * q);
+        const kick = wq * ks * (60 + 140 * Math.random());
+        ovx[j] += (dx / d) * kick * 0.3 + rx[j] * kick * 0.55;
+        ovy[j] += (dy / d) * kick * 0.3 + ry[j] * kick * 0.55;
       }
     };
 
@@ -283,15 +485,48 @@ export function ParticleLogo() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       ctx.globalCompositeOperation = "lighter";
-      for (let lv = 0; lv < 3; lv++) {
+
+      // halo dust
+      const ease = clamp((t - formAt) / 2.4, 0, 1);
+      if (ease > 0) {
+        const rotH = rotY * 0.5 + 1.3;
+        const cH = Math.cos(rotH);
+        const sH = Math.sin(rotH);
+        const cT = Math.cos(tilt * 0.8);
+        const sT = Math.sin(tilt * 0.8);
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.fillStyle = pass ? "#a9c9ff" : "#4d86ff";
+          ctx.globalAlpha = (pass ? 0.62 : 0.34) * ease;
+          for (let k = 0; k < nH; k++) {
+            const x1 = hux[k] * cH + huz[k] * sH;
+            const z1 = -hux[k] * sH + huz[k] * cH;
+            const y2 = huy[k] * cT - z1 * sT;
+            const z2 = huy[k] * sT + z1 * cT;
+            if ((z2 >= 0 ? 1 : 0) !== pass) continue;
+            const hh = nLive ? waveAt(x1, y2, z2) * 1.6 : 0;
+            const rad = (0.7 + 0.3 * ease) * hr[k] * (1 + hh + 0.025 * Math.sin(t * 0.7 + hph[k]));
+            const pp = 1 / (1 - 0.3 * z2 * rad);
+            const s = hsz[k] * (0.8 + 0.4 * pp);
+            ctx.fillRect(cx + x1 * R * rad * pp - s / 2, cy + y2 * R * rad * pp - s / 2, s, s);
+          }
+        }
+      }
+
+      // sphere
+      for (let lv = 0; lv < LV; lv++) {
+        const a = off[lv];
+        const b = off[lv + 1];
+        if (a === b) continue;
         ctx.fillStyle = SCOL[lv];
         ctx.globalAlpha = SALP[lv];
-        for (let j = 0; j < nS; j++) {
-          if (slv[j] !== lv) continue;
-          const s = ssz[j] * (0.75 + 0.55 * sdp[j]);
+        for (let k = a; k < b; k++) {
+          const j = order[k];
+          const s = sps[j];
           ctx.fillRect(spx[j] - s / 2, spy[j] - s / 2, s, s);
         }
       }
+
+      // logo
       ctx.globalAlpha = 0.95;
       const ds = small ? 2 : 2.3;
       for (let b = 0; b < 3; b++) {
@@ -304,6 +539,44 @@ export function ParticleLogo() {
       }
       ctx.globalAlpha = 1;
     };
+
+    const local = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (t < formAt + 1.2) return;
+      const [px, py] = local(e);
+      if (Math.hypot(px - cx, py - cy) > R * 1.35) return;
+      drag.down = true;
+      drag.id = e.pointerId;
+      drag.lx = px;
+      drag.ly = py;
+      drag.dx = 0;
+      drag.dy = 0;
+      const now = performance.now();
+      combo = now - lastTap < 380 ? Math.min(combo + 1, 6) : 0;
+      lastTap = now;
+      const power = 1 + combo * 0.28;
+      addRipple((px - cx) / R, (py - cy) / R, 0.06 * power);
+      burst(px, py, power);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!drag.down || e.pointerId !== drag.id) return;
+      const [px, py] = local(e);
+      drag.dx += px - drag.lx;
+      drag.dy += py - drag.ly;
+      drag.lx = px;
+      drag.ly = py;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId === drag.id) drag.down = false;
+    };
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointercancel", onUp, { passive: true });
 
     const tracker = trackPointer();
     const frame = (dt: number) => {
@@ -348,10 +621,28 @@ export function ParticleLogo() {
         ly[i] += lvy[i] * dt;
       }
 
-      rotY += dt * (0.16 + (hasP ? clamp((px - cx) / AW, -0.5, 0.5) * 0.9 : 0));
-      const tt = hasP ? clamp((py - cy) / AH, -0.5, 0.5) * 0.7 : 0.18;
-      tilt += (tt - tilt) * Math.min(1, dt * 3);
-      project(dt, ppx, ppy);
+      // spin: follow the finger while dragging, keep gliding after release, then settle
+      const dragging = drag.down && hasP;
+      if (drag.down) {
+        const k = 1.1 / R;
+        rotY += drag.dx * k;
+        tilt = clamp(tilt + (drag.dy * 0.8) / R, -0.7, 0.7);
+        spin += (clamp((drag.dx * k) / dt, -7, 7) - spin) * Math.min(1, dt * 10);
+        dvx += (drag.dx / dt - dvx) * Math.min(1, dt * 12);
+        dvy += (drag.dy / dt - dvy) * Math.min(1, dt * 12);
+        drag.dx = 0;
+        drag.dy = 0;
+      } else {
+        const base = 0.2 + (hasP ? clamp((px - cx) / AW, -0.5, 0.5) * 0.5 : 0);
+        spin += (base - spin) * Math.min(1, dt * 1.4);
+        rotY += spin * dt;
+        const dec = Math.exp(-dt * 10);
+        dvx *= dec;
+        dvy *= dec;
+        const tt = hasP ? clamp((py - cy) / AH, -0.5, 0.5) * 0.7 : 0.18;
+        tilt += (tt - tilt) * Math.min(1, dt * 2.5);
+      }
+      project(dt, ppx, ppy, dragging);
       draw();
     };
 
@@ -374,6 +665,10 @@ export function ParticleLogo() {
       stopLoop();
       stopReady();
       tracker.stop();
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, []);
 

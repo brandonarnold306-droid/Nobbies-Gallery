@@ -399,3 +399,6 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 @keyframes ldSheen{0%{background-position:125% 0}100%{background-position:-25% 0}}
 @keyframes ldPulse{50%{opacity:.55;transform:translate(-50%,-50%) scale(1.08)}}
 @keyframes ldFallback{to{opacity:0;visibility:hidden;pointer-events:none}}
+
+/* let horizontal swipes reach the hero particles while vertical scrolling still works */
+.hero{touch-action:pan-y}
